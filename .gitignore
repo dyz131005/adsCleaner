@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.pyz
+*.spec
+
+# Build and dist
+build/
+dist/
+
+# Virtual environment
+venv/
+
+# Logs
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
