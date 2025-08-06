@@ -1,21 +1,28 @@
-# Python
+# Python 缓存文件
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
-*.pyz
-*.spec
 
-# Build and dist
+# 打包生成的文件
 build/
 dist/
-
-# Virtual environment
+*.spec
+*.zip
+# 虚拟环境
 venv/
+env/
 
-# Logs
+# 临时文件
 *.log
+*.tmp
+*.temp
+*.bak
 
-# OS files
-.DS_Store
-Thumbs.db
+# IDE 文件
+.vscode/
+.idea/
+*.iml
+
+# 可执行文件
+*.exe

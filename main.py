@@ -1,3 +1,6 @@
+# Copyright (c) 2023 dyz131005
+# Licensed under the MIT License
+
 import sys
 import os
 import ctypes
@@ -9,10 +12,11 @@ import traceback
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
     QLabel, QComboBox, QGroupBox, QCheckBox, QProgressBar, QFileDialog,
-    QListWidget, QStackedWidget, QMessageBox, QAction, QSystemTrayIcon, QMenu
+    QListWidget, QStackedWidget, QMessageBox, QAction, QSystemTrayIcon, QMenu,
+    QDialog, QTextEdit, QScrollArea, QVBoxLayout, QHBoxLayout, QPushButton
 )
 from PyQt5.QtCore import Qt, QThread, pyqtSignal
-from PyQt5.QtGui import QIcon
+from PyQt5.QtGui import QIcon, QTextCursor, QFont
 
 # 设置插件路径 - 必须放在所有导入之前
 if hasattr(sys, '_MEIPASS'):
@@ -79,6 +83,88 @@ class CleanerWorker(QThread):
     def cancel(self):
         """取消清理任务"""
         self.is_canceled = True
+
+class UpdateLogDialog(QDialog):
+    """更新日志对话框"""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("更新日志")
+        self.setGeometry(200, 200, 600, 400)
+        
+        # 设置图标
+        if parent:
+            self.setWindowIcon(parent.windowIcon())
+        
+        # 创建主布局
+        layout = QVBoxLayout()
+        
+        # 创建文本编辑框
+        self.text_edit = QTextEdit()
+        self.text_edit.setReadOnly(True)
+        self.text_edit.setFont(QFont("微软雅黑", 10))
+        
+        # 创建滚动区域
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setWidget(self.text_edit)
+        
+        layout.addWidget(scroll_area)
+        
+        # 添加关闭按钮
+        btn_layout = QHBoxLayout()
+        btn_layout.addStretch()
+        close_btn = QPushButton("关闭")
+        close_btn.clicked.connect(self.close)
+        btn_layout.addWidget(close_btn)
+        btn_layout.addStretch()
+        
+        layout.addLayout(btn_layout)
+        self.setLayout(layout)
+        
+        # 加载更新日志
+        self.load_update_log()
+
+    def load_update_log(self):
+        """加载更新日志内容"""
+        # 确定日志文件路径
+        if is_frozen():
+            # 打包环境
+            base_path = sys._MEIPASS
+        else:
+            # 开发环境
+            base_path = os.path.dirname(os.path.abspath(__file__))
+        
+        log_path = os.path.join(base_path, "newlog.txt")
+        
+        # 检查文件是否存在
+        if not os.path.exists(log_path):
+            self.text_edit.setText("更新日志文件未找到。")
+            return
+        
+        try:
+            # 读取日志内容
+            with open(log_path, "r", encoding="utf-8") as f:
+                content = f.read()
+            
+            # 解析日志内容
+            if "&dyz&" in content:
+                # 分割日志条目
+                entries = content.split("&dyz&")
+                # 过滤空条目
+                entries = [entry.strip() for entry in entries if entry.strip()]
+                
+                # 格式化日志
+                formatted_log = ""
+                for i, entry in enumerate(entries):
+                    formatted_log += f"<b>更新 #{i+1}</b>\n"
+                    formatted_log += f"{entry}\n\n"
+                    formatted_log += "-" * 50 + "\n\n"
+                
+                self.text_edit.setText(formatted_log)
+            else:
+                self.text_edit.setText(content)
+        except Exception as e:
+            self.text_edit.setText(f"加载更新日志失败: {str(e)}")
 
 class DiskCleanerApp(QMainWindow):
     """磁盘清理应用主窗口"""
@@ -252,9 +338,21 @@ class DiskCleanerApp(QMainWindow):
         file_menu.addAction(exit_action)
         
         help_menu = menubar.addMenu('帮助')
+        
+        # 添加"关于"菜单项
         about_action = QAction('关于', self)
         about_action.triggered.connect(self.show_about)
         help_menu.addAction(about_action)
+        
+        # 添加"更新日志"菜单项
+        log_action = QAction('更新日志', self)
+        log_action.triggered.connect(self.show_update_log)
+        help_menu.addAction(log_action)
+
+    def show_update_log(self):
+        """显示更新日志对话框"""
+        log_dialog = UpdateLogDialog(self)
+        log_dialog.exec_()
 
     def switch_mode(self):
         """切换用户模式"""
@@ -423,15 +521,16 @@ class DiskCleanerApp(QMainWindow):
         """显示错误信息"""
         QMessageBox.critical(self, "错误", msg)
         self.clean_btn.setEnabled(True)
-
+    
     def show_about(self):
         """显示关于对话框"""
         QMessageBox.about(self, "关于 adsC盘清理大师", 
-                         "版本: 1.0\n\n"
+                         "版本: 1.1\n\n"
                          "一款深度清理C盘的专业工具\n"
                          "支持普通用户和技术人员两种模式\n"
-                         "开发者：csdn用户@程序鸠\n"
-                         "B站：@qpython前方恐怖预警")
+                         "许可证: MIT\n"
+                         "开发者：dyz131005\n"
+                         "邮箱: 3069278895@qq.com")
 
     def close_app(self):
         """关闭应用"""
