@@ -1,4 +1,4 @@
-# Copyright (c) 2023 dyz131005
+# Copyright (c) 2025 dyz131005
 # Licensed under the MIT License
 
 import os
@@ -10,7 +10,7 @@ def main():
     """构建可执行文件的主函数"""
     print("=" * 50)
     print("adsCleaner 打包工具")
-    print("版权所有 (c) 2023 dyz131005")
+    print("版权所有 (c) 2025 dyz131005")
     print("MIT 许可证 - 详见 LICENSE 文件")
     print("=" * 50)
     
@@ -20,25 +20,24 @@ def main():
     
     print(f"\n当前工作目录: {os.getcwd()}")
     
-    # 图标处理
+    # 检查图标文件
     icon_path = os.path.join(base_dir, 'pkk.ico')
     if not os.path.exists(icon_path):
-        print(f"\n❌ 错误: 图标文件未找到: {icon_path}")
-        print("请确保图标文件位于项目根目录")
+        # 如果ICO不存在，尝试使用PNG
+        png_path = os.path.join(base_dir, 'pkk.png')
+        if os.path.exists(png_path):
+            print("\n⚠️ 警告: 未找到ICO图标文件，但存在PNG文件")
+            print("请先运行 convert_icon.py 转换图标")
+        else:
+            print(f"\n❌ 错误: 图标文件未找到: pkk.ico 或 pkk.png")
+            print("请确保图标文件位于项目根目录")
         return
     
     # 日志文件处理
     log_path = os.path.join(base_dir, 'newlog.txt')
     if not os.path.exists(log_path):
         print(f"\n⚠️ 警告: 更新日志文件未找到: {log_path}")
-        print("请确保创建了更新日志文件")
-        # 创建一个空的日志文件作为占位符
-        try:
-            with open(log_path, 'w') as f:
-                f.write("更新日志文件将在正式版本中提供\n")
-            print("已创建临时更新日志文件")
-        except Exception as e:
-            print(f"创建临时日志文件失败: {e}")
+        print("请创建")
     
     # 清理之前的构建
     for folder in ['build', 'dist']:
@@ -70,6 +69,18 @@ def main():
         print("运行: pip install -r requirements.txt")
         return
     
+    # 添加工具压缩包到打包资源
+    tool_files = []
+    tool_zips = ["Handle.zip", "PSTools.zip"]
+    for zip_name in tool_zips:
+        zip_path = os.path.join(base_dir, zip_name)
+        if os.path.exists(zip_path):
+            print(f"\n✅ 找到工具压缩包: {zip_path}")
+            tool_files.append(f'--add-data={zip_path};.')
+        else:
+            print(f"\n⚠️ 警告: 工具压缩包未找到: {zip_path}")
+            print("请确保压缩包位于项目根目录")
+    
     # 构建命令
     build_args = [
         '--onefile',
@@ -81,9 +92,15 @@ def main():
         '--hidden-import=PyQt5.QtCore',
         '--hidden-import=PyQt5.QtGui',
         '--hidden-import=PyQt5.QtWidgets',
-        '--add-data=requirements.txt;.',  # 添加依赖文件
-        'main.py'
+        '--exclude-module=PIL',  # 排除PIL模块
+        '--exclude-module=Pillow',  # 排除Pillow模块
     ]
+    
+    # 添加工具文件
+    build_args.extend(tool_files)
+    
+    # 添加主程序
+    build_args.append('main.py')
     
     print("\n" + "=" * 50)
     print("开始打包...")
@@ -100,14 +117,6 @@ def main():
         if os.path.exists(dist_path):
             print(f"\n程序位置: {os.path.abspath(dist_path)}")
             print("大小:", round(os.path.getsize(dist_path) / (1024 * 1024), 2), "MB")
-            
-            # 检查是否包含必要的资源文件
-            import tempfile
-            with tempfile.TemporaryDirectory() as temp_dir:
-                print("\n检查打包内容...")
-                os.chdir(temp_dir)
-                os.system(f'"{dist_path}" --help')
-                print(f"\n临时目录内容: {os.listdir(temp_dir)}")
         else:
             print("\n⚠️ 警告: 未找到生成的可执行文件")
     except Exception as e:

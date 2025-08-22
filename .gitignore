@@ -8,7 +8,7 @@ __pycache__/
 build/
 dist/
 *.spec
-*.zip
+
 # 虚拟环境
 venv/
 env/
@@ -18,7 +18,7 @@ env/
 *.tmp
 *.temp
 *.bak
-
+config.ini
 # IDE 文件
 .vscode/
 .idea/

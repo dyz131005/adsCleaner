@@ -1,0 +1,25 @@
+[33mcommit 50f4f3c19c991a8509dab749c78500630c0def2a[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m)[m
+Author: dyz131005 <3069278895@qq.com>
+Date:   Wed Aug 6 21:09:36 2025 +0800
+
+    Add update log feature | 添加更新日志功能
+
+M	.gitignore
+A	LICENSE
+M	README.md
+M	build.py
+M	main.py
+A	newlog.txt
+
+[33mcommit dcae7224fe06b19a107891c0a67f453ffc991dc8[m
+Author: dyz131005 <3069278895@qq.com>
+Date:   Fri Aug 1 19:01:42 2025 +0800
+
+    Initial commit: corrected username and email
+
+A	.gitignore
+A	README.md
+A	build.py
+A	main.py
+A	pkk.ico
+A	requirements.txt
