@@ -6,8 +6,6 @@
   **adsClean** 是一款专为 Windows 系统设计的专业磁盘清理工具，旨在帮助用户快速释放宝贵的 C 盘空间，提升系统性能。
 </div>
 
-> **推荐理由**：在 Windows 系统长期使用后，系统垃圾文件会占用大量空间，导致系统变慢。adsClean 提供了智能扫描和深度清理功能，一键即可释放数十 MB 空间，是每位 Windows 用户必备的系统优化工具！
-
 ## 功能特性
 
 ### 三模式清理引擎
@@ -31,8 +29,6 @@
   - DirectX 着色器缓存（深度）
   - 自定义清理路径
 
-> **警告**：深度清理模式可能会清理系统关键缓存文件，可能导致某些程序需要重新初始化。使用前请确保已备份重要数据并创建系统还原点。
-
 ### 核心优势
 - **智能扫描**：精准识别可清理文件，避免误删重要数据
 - **可视化进度**：实时显示清理进度和释放空间大小
@@ -53,31 +49,53 @@
 - Windows 7/8/10/11 操作系统
 - Python 3.7 或更高版本
 
-### 安装步骤
+### 推荐使用虚拟环境
+为了避免与系统Python环境冲突，推荐使用虚拟环境安装和运行本程序。
 
-1. **克隆仓库**：
-   ```bash
-   git clone https://github.com/dyz131005/adsCleaner.git
-   cd adsCleaner
-   ```
+#### 创建虚拟环境
+```bash
+# 克隆仓库
+git clone https://github.com/dyz131005/adsCleaner.git
+cd adsCleaner
 
-2. **安装依赖**：
-   ```bash
-   pip install -r requirements.txt
-   ```
+# 创建虚拟环境（Windows）
+python -m venv venv
 
-3. **转换图标**（可选）：
-   ```bash
-   python convert_icon.py
-   ```
+# 激活虚拟环境（Windows）
+venv\Scripts\activate
 
-4. **运行程序**：
-   ```bash
-   python main.py
-   ```
+# 创建虚拟环境（Linux/Mac）
+python3 -m venv venv
+
+# 激活虚拟环境（Linux/Mac）
+source venv/bin/activate
+```
+
+#### 安装依赖
+```bash
+# 在激活的虚拟环境中安装依赖
+pip install -r requirements.txt
+```
+
+#### 运行程序
+```bash
+# 在虚拟环境中运行程序
+python main.py
+```
+
+#### 退出虚拟环境
+```bash
+# 使用完毕后退出虚拟环境
+deactivate
+```
 
 ### 打包为可执行文件
+如果希望直接运行程序而不安装Python环境，可以打包为可执行文件：
 ```bash
+# 在虚拟环境中安装pyinstaller
+pip install pyinstaller
+
+# 打包程序
 python build.py
 ```
 打包后的程序位于 `dist` 目录，可直接运行，无需 Python 环境。
@@ -85,13 +103,13 @@ python build.py
 ## 使用说明
 
 ### 主界面概览
-软件主界面截图：
-![软件主界面截图](https://i-blog.csdnimg.cn/direct/a444e12ce0134079911206a12a327659.png)
+软件主界面包含磁盘空间统计、模式选择、清理选项和操作按钮。
 
-1. **用户模式切换**：普通用户/技术人员/深度清理
-2. **清理选项**：根据模式显示不同选项
-3. **进度显示**：实时清理进度
-4. **操作按钮**：开始清理/打开卸载程序/创建还原点
+1. **磁盘空间统计**：实时显示C盘使用情况、清理空间统计
+2. **用户模式切换**：普通用户/技术人员/深度清理
+3. **清理选项**：根据模式显示不同选项
+4. **进度显示**：实时清理进度
+5. **操作按钮**：开始清理/打开卸载程序/创建还原点
 
 ### 基本使用流程
 1. 选择适合您的用户模式
@@ -101,11 +119,18 @@ python build.py
 
 ### 高级使用技巧
 - **自定义清理路径**：在技术人员模式下添加特定目录
-- **浏览器缓存清理**：支持 [Google Chrome](https://www.google.com/chrome/) 和 [Microsoft Edge](https://www.microsoft.com/edge)
+- **浏览器缓存清理**：支持 Google Chrome 和 Microsoft Edge
 - **批量清理**：可同时清理多个位置
 - **创建还原点**：在深度清理前，建议先创建系统还原点
 
 ## 更新日志
+
+### 版本 1.3 (2025-08-28)
+- 新增磁盘空间统计功能，实时显示C盘使用情况
+- 修复回收站清理问题，支持多种清理方法
+- 添加清理空间统计，显示本次和累计清理空间
+- 优化用户界面，增加磁盘使用进度条
+- 改进清理过程中的空间更新显示
 
 ### 版本 1.2 (2025-08-21)
 - 新增深度清理模式
@@ -131,12 +156,6 @@ python build.py
 ### 报告问题
 如果您发现任何错误或有改进建议，请[创建 Issue](https://github.com/dyz131005/adsCleaner/issues)
 
-### 需要帮助的任务
-- 多语言支持
-- 清理空间统计功能
-- 自动更新机制
-- 系统托盘支持
-
 ## 许可证
 本项目采用 [MIT 许可证](https://opensource.org/licenses/MIT)，您可以自由地：
 - 使用、复制、修改本软件
@@ -152,10 +171,8 @@ python build.py
 - **B站**：[@qpython前方恐怖预警](https://space.bilibili.com/3546716410218699?spm_id_from=333.1007.0.0)
 
 ## 支持项目
-如果 adsClean 帮助您释放了磁盘空间并提升了系统性能，请考虑给项目一个 Star！您的支持是我们持续改进的动力。
+如果 adsClean 帮助您释放了磁盘空间并提升了系统性能，请考虑给项目一个 Star！
 
 [![Star on GitHub](https://img.shields.io/github/stars/dyz131005/adsCleaner?style=social)](https://github.com/dyz131005/adsCleaner/stargazers)
-
-> **专业提示**：建议每月运行一次 adsClean 进行系统清理，保持 Windows 系统的最佳性能状态。对于技术人员，可以设置定时任务自动执行清理操作。
 
 **免责声明**：使用本软件进行系统清理存在一定风险，请确保您了解清理内容。开发者不对因使用本软件造成的任何数据损失负责。

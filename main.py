@@ -99,6 +99,133 @@ TOOLS_CONFIG = {
     }
 }
 
+class DiskSpaceWidget(QWidget):
+    """磁盘空间显示组件"""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.space_before_clean = 0
+        self.init_ui()
+        self.update_disk_space()
+        
+    def init_ui(self):
+        """初始化UI"""
+        layout = QVBoxLayout()
+        
+        # 标题
+        title_label = QLabel("磁盘空间统计")
+        title_label.setStyleSheet("font-weight: bold; font-size: 14px;")
+        layout.addWidget(title_label)
+        
+        # 磁盘使用情况图表
+        self.usage_group = QGroupBox("C盘使用情况")
+        usage_layout = QVBoxLayout()
+        
+        # 进度条显示
+        self.usage_progress = QProgressBar()
+        self.usage_progress.setFormat("已使用: %p%")
+        self.usage_progress.setStyleSheet("""
+            QProgressBar {
+                border: 2px solid grey;
+                border-radius: 5px;
+                text-align: center;
+                height: 20px;
+            }
+            QProgressBar::chunk {
+                background-color: #05B8CC;
+                width: 20px;
+            }
+        """)
+        usage_layout.addWidget(self.usage_progress)
+        
+        # 详细数据
+        info_layout = QHBoxLayout()
+        
+        # 左侧：使用情况
+        left_layout = QVBoxLayout()
+        self.used_label = QLabel("已用: -- GB")
+        self.free_label = QLabel("可用: -- GB")
+        self.total_label = QLabel("总计: -- GB")
+        left_layout.addWidget(self.used_label)
+        left_layout.addWidget(self.free_label)
+        left_layout.addWidget(self.total_label)
+        
+        # 右侧：清理统计
+        right_layout = QVBoxLayout()
+        self.cleaned_label = QLabel("本次清理: -- MB")
+        self.cleaned_label.setStyleSheet("color: green; font-weight: bold;")
+        self.space_saved_label = QLabel("累计节省: -- MB")
+        self.space_saved_label.setStyleSheet("color: blue;")
+        right_layout.addWidget(self.cleaned_label)
+        right_layout.addWidget(self.space_saved_label)
+        
+        info_layout.addLayout(left_layout)
+        info_layout.addLayout(right_layout)
+        usage_layout.addLayout(info_layout)
+        
+        self.usage_group.setLayout(usage_layout)
+        layout.addWidget(self.usage_group)
+        
+        self.setLayout(layout)
+    
+    def update_disk_space(self):
+        """更新磁盘空间信息"""
+        try:
+            usage = psutil.disk_usage('C:')
+            total_gb = usage.total / (1024**3)
+            used_gb = usage.used / (1024**3)
+            free_gb = usage.free / (1024**3)
+            used_percent = usage.percent
+            
+            # 更新进度条
+            self.usage_progress.setValue(int(used_percent))
+            
+            # 更新标签
+            self.used_label.setText(f"已用: {used_gb:.1f} GB")
+            self.free_label.setText(f"可用: {free_gb:.1f} GB")
+            self.total_label.setText(f"总计: {total_gb:.1f} GB")
+            
+            return used_percent, free_gb
+        except Exception as e:
+            print(f"更新磁盘空间失败: {e}")
+            return 0, 0
+    
+    def set_space_before_clean(self):
+        """设置清理前的空间基准"""
+        try:
+            usage = psutil.disk_usage('C:')
+            self.space_before_clean = usage.free
+        except Exception as e:
+            print(f"设置清理前空间基准失败: {e}")
+            self.space_before_clean = 0
+    
+    def update_cleaned_space(self):
+        """更新清理后的空间统计"""
+        if self.space_before_clean == 0:
+            return
+            
+        try:
+            usage = psutil.disk_usage('C:')
+            space_cleaned = usage.free - self.space_before_clean
+            
+            if space_cleaned > 0:
+                space_cleaned_mb = space_cleaned / (1024**2)
+                self.cleaned_label.setText(f"本次清理: {space_cleaned_mb:.1f} MB")
+                
+                # 更新累计节省（简化处理，实际应该持久化存储）
+                current_text = self.space_saved_label.text()
+                if "累计节省" in current_text:
+                    try:
+                        current_saved = float(current_text.split(":")[1].split("MB")[0].strip())
+                        total_saved = current_saved + space_cleaned_mb
+                    except:
+                        total_saved = space_cleaned_mb
+                else:
+                    total_saved = space_cleaned_mb
+                
+                self.space_saved_label.setText(f"累计节省: {total_saved:.1f} MB")
+        except Exception as e:
+            print(f"更新清理空间统计失败: {e}")
+
 class CleanerWorker(QThread):
     """清理工作线程，负责在后台执行清理任务"""
     progress = pyqtSignal(int)
@@ -109,6 +236,7 @@ class CleanerWorker(QThread):
     detailed_log = pyqtSignal(str)  # 新增详细日志信号
     task_completed = pyqtSignal()  # 新增任务完成信号
     heartbeat = pyqtSignal()  # 心跳信号
+    space_updated = pyqtSignal()  # 空间更新信号
 
     def __init__(self, tasks, force_mode=False):
         super().__init__()
@@ -121,6 +249,7 @@ class CleanerWorker(QThread):
         self.last_activity_time = time.time()  # 最后活动时间
         self.task_queue = queue.Queue()  # 任务队列
         self.batch_size = 50  # 每批处理文件数量
+        self.cleaned_size = 0  # 清理的文件大小统计
         
         # 填充任务队列
         for task in tasks:
@@ -166,6 +295,10 @@ class CleanerWorker(QThread):
                 self.progress.emit(progress_value)
                 self.message.emit(f"清理中: {args[0] if args else func.__name__} ({progress_value}%)")
                 
+                # 定期发送空间更新信号
+                if processed % 5 == 0:  # 每5个任务更新一次空间显示
+                    self.space_updated.emit()
+                
                 # 增加UI响应性 - 更频繁地处理事件
                 self.heartbeat.emit()
                 time.sleep(0.005)  # 减少延迟
@@ -180,6 +313,8 @@ class CleanerWorker(QThread):
             else:
                 self.message.emit("清理完成!")
                 self.log("所有清理任务已完成")
+                # 最后更新一次空间显示
+                self.space_updated.emit()
         except Exception as e:
             self.log(f"清理过程中发生异常: {str(e)}")
             self.error.emit(str(e))
@@ -580,7 +715,7 @@ class ForceModePasswordDialog(QDialog):
         
         # 小眼睛按钮
         self.toggle_eye_btn = QPushButton()
-        self.toggle_eye_btn.setIcon(QIcon(":/icons/eye_open.png"))  # 需要提供图标资源，这里用文本代替
+        self.toggle_eye_btn.setIcon(QIcon(":/eye.ico"))  # 需要提供图标资源，这里用文本代替
         self.toggle_eye_btn.setText("显示")
         self.toggle_eye_btn.setCheckable(True)
         self.toggle_eye_btn.toggled.connect(self.toggle_password_visibility)
@@ -716,9 +851,11 @@ class DiskCleanerApp(QMainWindow):
             except:
                 pass
         
-        # 开发者模式标志
-        self.developer_force_mode = False
-        self.force_mode_activated = False
+        # 磁盘空间统计
+        self.disk_usage = None
+        self.disk_usage_timer = QTimer()
+        self.disk_usage_timer.timeout.connect(self.update_disk_usage)
+        self.disk_usage_timer.start(5000)  # 每5秒更新一次
         self.log_dialog = None  # 日志对话框
         
         # 加载配置
@@ -760,6 +897,10 @@ class DiskCleanerApp(QMainWindow):
         """初始化用户界面"""
         main_widget = QWidget()
         main_layout = QVBoxLayout()
+        
+        # 添加磁盘空间统计组件
+        self.disk_space_widget = DiskSpaceWidget()
+        main_layout.addWidget(self.disk_space_widget)
         
         # 模式选择
         mode_layout = QHBoxLayout()
@@ -1182,6 +1323,9 @@ class DiskCleanerApp(QMainWindow):
         # 重置失败文件列表
         self.failed_files = []
         
+        # 设置清理前的空间基准
+        self.disk_space_widget.set_space_before_clean()
+        
         tasks = []
         mode = self.mode_combo.currentIndex()
         
@@ -1295,7 +1439,12 @@ class DiskCleanerApp(QMainWindow):
         self.worker.warning.connect(self.show_warning)
         self.worker.detailed_log.connect(self.log_dialog.append_log)
         self.worker.heartbeat.connect(self.heartbeat)
+        self.worker.space_updated.connect(self.update_disk_space_display)
         self.worker.start()
+
+    def update_disk_space_display(self):
+        """更新磁盘空间显示"""
+        self.disk_space_widget.update_disk_space()
 
     def heartbeat(self):
         """心跳响应，防止假死"""
@@ -1881,7 +2030,7 @@ class DiskCleanerApp(QMainWindow):
             
             # 方法1：使用taskkill强制终止
             try:
-                subprocess.run(f'taskkill /f /im "{os.path.bastname(file_path)}"', 
+                subprocess.run(f'taskkill /f /im "{os.path.basename(file_path)}"', 
                               shell=True, check=True, timeout=10)
                 self.worker.log(f"使用taskkill强制终止进程: {file_path}")
                 return True
@@ -2206,26 +2355,104 @@ class DiskCleanerApp(QMainWindow):
                 self.worker.log(f"清理预读取文件失败: {e}")
 
     def empty_recycle_bin(self):
-        """清空回收站"""
+        """清空回收站 - 修复版本"""
         try:
-            # 使用send2trash清空回收站
-            send2trash.send2trash([])
             if self.worker:
-                self.worker.log("回收站已清空 (send2trash方法)")
-        except Exception as e:
-            if self.worker:
-                self.worker.log(f"清空回收站失败: {e}")
-            # 备选方案：使用命令行
+                self.worker.log("开始清空回收站...")
+            
+            # 方法1: 使用send2trash库（最可靠）
             try:
-                subprocess.run('cmd /c "rd /s /q C:\\$Recycle.bin"', shell=True, check=True, timeout=30)
+                # 获取回收站中的所有文件
+                from send2trash import send2trash
+                
+                # 遍历所有驱动器的回收站
+                drives = [d for d in psutil.disk_partitions() if d.fstype == 'NTFS']
+                for drive in drives:
+                    recycle_bin_path = os.path.join(drive.mountpoint, '$Recycle.Bin')
+                    if os.path.exists(recycle_bin_path):
+                        for item in os.listdir(recycle_bin_path):
+                            item_path = os.path.join(recycle_bin_path, item)
+                            if os.path.isdir(item_path) and item not in ['.', '..']:
+                                # 删除回收站中的用户文件夹
+                                user_recycle_path = item_path
+                                if os.path.exists(user_recycle_path):
+                                    for recycled_item in os.listdir(user_recycle_path):
+                                        if recycled_item not in ['.', '..']:
+                                            full_path = os.path.join(user_recycle_path, recycled_item)
+                                            try:
+                                                if os.path.isfile(full_path):
+                                                    os.unlink(full_path)
+                                                elif os.path.isdir(full_path):
+                                                    shutil.rmtree(full_path)
+                                            except Exception as e:
+                                                if self.worker:
+                                                    self.worker.log(f"删除回收站项目失败 {full_path}: {e}")
+                
+                if self.worker:
+                    self.worker.log("回收站已清空 (send2trash方法)")
+                return
+            except Exception as e:
+                if self.worker:
+                    self.worker.log(f"send2trash方法失败: {e}")
+            
+            # 方法2: 使用Windows API清空回收站
+            try:
+                from ctypes import windll, wintypes
+                SHEmptyRecycleBin = windll.shell32.SHEmptyRecycleBinW
+                SHEmptyRecycleBin.argtypes = [wintypes.HWND, wintypes.LPCWSTR, wintypes.DWORD]
+                SHEmptyRecycleBin.restype = wintypes.HRESULT
+                
+                # 调用API清空回收站
+                result = SHEmptyRecycleBin(None, None, 0x1 | 0x2)  # SHERB_NOCONFIRMATION | SHERB_NOPROGRESSUI
+                if result == 0:
+                    if self.worker:
+                        self.worker.log("回收站已成功清空 (Windows API方法)")
+                    return
+                else:
+                    raise Exception(f"API错误代码: {result}")
+            except Exception as e:
+                if self.worker:
+                    self.worker.log(f"Windows API清空回收站失败: {e}")
+            
+            # 方法3: 使用命令行直接删除回收站内容
+            try:
+                # 删除所有驱动器的回收站内容
+                drives = [d for d in psutil.disk_partitions() if d.fstype == 'NTFS']
+                for drive in drives:
+                    recycle_bin_path = os.path.join(drive.mountpoint, '$Recycle.Bin')
+                    if os.path.exists(recycle_bin_path):
+                        # 使用管理员权限删除回收站内容
+                        subprocess.run(
+                            f'cmd /c "rd /s /q "{recycle_bin_path}" 2>nul & md "{recycle_bin_path}""', 
+                            shell=True, 
+                            timeout=30,
+                            creationflags=subprocess.CREATE_NO_WINDOW
+                        )
+                
                 if self.worker:
                     self.worker.log("使用命令行清空回收站成功")
-            except subprocess.TimeoutExpired:
+            except Exception as e:
                 if self.worker:
-                    self.worker.log("命令行清空回收站超时")
-            except Exception as ex:
+                    self.worker.log(f"命令行清空回收站失败: {e}")
+            
+            # 方法4: 使用PowerShell命令
+            try:
+                subprocess.run(
+                    'powershell -Command "Clear-RecycleBin -Force"', 
+                    shell=True, 
+                    check=True, 
+                    timeout=30,
+                    creationflags=subprocess.CREATE_NO_WINDOW
+                )
                 if self.worker:
-                    self.worker.log(f"命令行清空回收站失败: {ex}")
+                    self.worker.log("使用PowerShell清空回收站成功")
+            except Exception as e:
+                if self.worker:
+                    self.worker.log(f"PowerShell清空回收站失败: {e}")
+                
+        except Exception as e:
+            if self.worker:
+                self.worker.log(f"清空回收站最终失败: {str(e)}")
 
     def create_system_restore_point(self):
         """创建系统还原点"""
@@ -2309,6 +2536,9 @@ class DiskCleanerApp(QMainWindow):
         self.clean_btn.setEnabled(True)
         self.cancel_btn.setEnabled(False)
         
+        # 更新磁盘空间统计
+        self.disk_space_widget.update_cleaned_space()
+        
         # 更新日志对话框标题
         if self.log_dialog:
             self.log_dialog.setWindowTitle("清理日志 - 已完成")
@@ -2350,13 +2580,14 @@ class DiskCleanerApp(QMainWindow):
     def show_about(self):
         """显示关于对话框"""
         QMessageBox.about(self, "关于 adsC盘清理大师", 
-                         "版本: 1.2\n\n"
+                         "版本: 1.3\n\n"
                          "一款深度清理C盘的专业工具\n"
                          "支持三种清理模式:\n"
                          "  - 普通用户模式\n"
                          "  - 技术人员模式\n"
                          "  - 深度清理模式\n\n"
-                         "新增深度清理模式\n"
+                         "新增磁盘空间统计功能\n"
+                         "修复回收站清理问题\n"
                          "许可证: MIT\n"
                          "开发者：dyz131005\n"
                          "邮箱: 3069278895@qq.com")
@@ -2376,6 +2607,10 @@ class DiskCleanerApp(QMainWindow):
             self.worker.wait(2000)
         self.save_config()  # 保存配置
         event.accept()
+
+    def update_disk_usage(self):
+        """更新磁盘空间统计信息"""
+        self.disk_space_widget.update_disk_space()
 
 
 def is_admin():
