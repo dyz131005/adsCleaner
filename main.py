@@ -1,5 +1,7 @@
+#################################################
 # Copyright (c) 2025 dyz131005
 # Licensed under the MIT License
+#################################################
 
 import sys
 import os
@@ -458,6 +460,9 @@ class ErrorLogDialog(QDialog):
         self.setWindowTitle("清理日志")
         self.setGeometry(300, 300, 800, 600)
         
+        # 去掉问号按钮
+        self.setWindowFlags(self.windowFlags() & ~Qt.WindowContextHelpButtonHint)
+        
         if parent:
             self.setWindowIcon(parent.windowIcon())
         
@@ -531,6 +536,9 @@ class UpdateLogDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("更新日志")
         self.setGeometry(200, 200, 600, 400)
+        
+        # 去掉问号按钮
+        self.setWindowFlags(self.windowFlags() & ~Qt.WindowContextHelpButtonHint)
         
         # 设置图标
         if parent:
@@ -626,6 +634,9 @@ class RestorePointDialog(QDialog):
         self.setWindowTitle("创建系统还原点")
         self.setGeometry(300, 300, 400, 300)
         
+        # 去掉问号按钮
+        self.setWindowFlags(self.windowFlags() & ~Qt.WindowContextHelpButtonHint)
+        
         if parent:
             self.setWindowIcon(parent.windowIcon())
         
@@ -671,6 +682,9 @@ class ForceModePasswordDialog(QDialog):
         self.setWindowTitle("⚠️ 强力模式激活")
         self.setGeometry(300, 300, 500, 500)
         
+        # 去掉问号按钮
+        self.setWindowFlags(self.windowFlags() & ~Qt.WindowContextHelpButtonHint)
+        
         if parent:
             self.setWindowIcon(parent.windowIcon())
         
@@ -715,8 +729,12 @@ class ForceModePasswordDialog(QDialog):
         
         # 小眼睛按钮
         self.toggle_eye_btn = QPushButton()
-        self.toggle_eye_btn.setIcon(QIcon(":/eye.ico"))  # 需要提供图标资源，这里用文本代替
-        self.toggle_eye_btn.setText("显示")
+        # 尝试加载小眼睛图标
+        icon_path = self.find_eye_icon()
+        if icon_path:
+            self.toggle_eye_btn.setIcon(QIcon(icon_path))
+        else:
+            self.toggle_eye_btn.setText("显示")
         self.toggle_eye_btn.setCheckable(True)
         self.toggle_eye_btn.toggled.connect(self.toggle_password_visibility)
         
@@ -725,11 +743,6 @@ class ForceModePasswordDialog(QDialog):
         password_layout.addWidget(self.toggle_eye_btn)
         
         layout.addLayout(password_layout)
-        
-        # 添加长按提示
-        long_press_label = QLabel("提示: 长按密码框可显示密码")
-        long_press_label.setStyleSheet("color: #666666; font-size: 10px; font-style: italic;")
-        layout.addWidget(long_press_label)
         
         # 按钮
         btn_layout = QHBoxLayout()
@@ -758,39 +771,27 @@ class ForceModePasswordDialog(QDialog):
         self.timer.setInterval(1000)  # 1秒
         self.timer.timeout.connect(self.update_timer)
         self.timer.start()
+    
+    def find_eye_icon(self):
+        """查找小眼睛图标"""
+        # 检查程序根目录
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        eye_path = os.path.join(base_dir, "eye.ico")
         
-        # 设置密码框的长按事件
-        self.password_edit.setMouseTracking(True)
-        self.password_edit.mousePressEvent = self.on_password_mouse_press
-        self.password_edit.mouseReleaseEvent = self.on_password_mouse_release
-        self.mouse_press_time = 0
-        self.mouse_pressed = False
-    
-    def on_password_mouse_press(self, event: QMouseEvent):
-        """鼠标按下事件"""
-        if event.button() == Qt.LeftButton:
-            self.mouse_press_time = time.time()
-            self.mouse_pressed = True
-    
-    def on_password_mouse_release(self, event: QMouseEvent):
-        """鼠标释放事件"""
-        if event.button() == Qt.LeftButton and self.mouse_pressed:
-            press_duration = time.time() - self.mouse_press_time
-            if press_duration > 1.0:  # 长按超过1秒
-                # 临时显示密码
-                original_echo = self.password_edit.echoMode()
-                self.password_edit.setEchoMode(QLineEdit.Normal)
-                QTimer.singleShot(2000, lambda: self.password_edit.setEchoMode(original_echo))
-            self.mouse_pressed = False
+        # 在打包环境中尝试从MEIPASS加载图标
+        if not os.path.exists(eye_path) and is_frozen():
+            eye_path = os.path.join(sys._MEIPASS, "eye.ico")
+        
+        if os.path.exists(eye_path):
+            return eye_path
+        return None
     
     def toggle_password_visibility(self, checked):
         """切换密码可见性"""
         if checked:
             self.password_edit.setEchoMode(QLineEdit.Normal)
-            self.toggle_eye_btn.setText("隐藏")
         else:
             self.password_edit.setEchoMode(QLineEdit.Password)
-            self.toggle_eye_btn.setText("显示")
     
     def update_timer(self):
         """更新计时器"""
@@ -822,6 +823,19 @@ class DiskCleanerApp(QMainWindow):
     """磁盘清理应用主窗口"""
     def __init__(self):
         super().__init__()
+        
+        # 去掉问号按钮
+        self.setWindowFlags(self.windowFlags() & ~Qt.WindowContextHelpButtonHint)
+        
+        # 先初始化所有必要属性，防止打包后配置读取失败
+        self.force_mode_activated = False
+        self.developer_force_mode = False
+        self.config = configparser.ConfigParser()
+        self.disk_usage = None
+        self.log_dialog = None
+        self.worker = None
+        self.failed_files = []
+        
         self.setWindowTitle("adsC盘清理大师")
         self.setGeometry(100, 100, 800, 600)
         
@@ -838,60 +852,19 @@ class DiskCleanerApp(QMainWindow):
                 self.setWindowIcon(QIcon(icon_path))
             except Exception as e:
                 print(f"设置窗口图标失败: {e}")
-                # 尝试使用默认图标
-                try:
-                    self.setWindowIcon(QIcon())
-                except:
-                    pass
         else:
             print(f"警告: 图标文件未找到: {icon_path}")
-            # 尝试使用默认图标
-            try:
-                self.setWindowIcon(QIcon())
-            except:
-                pass
         
-        # 磁盘空间统计
-        self.disk_usage = None
+        # 磁盘空间统计定时器
         self.disk_usage_timer = QTimer()
         self.disk_usage_timer.timeout.connect(self.update_disk_usage)
         self.disk_usage_timer.start(5000)  # 每5秒更新一次
-        self.log_dialog = None  # 日志对话框
         
-        # 加载配置
-        self.load_config()
+        # 重置强力模式状态，不保存配置
+        self.force_mode_activated = False
+        self.developer_force_mode = False
         
         self.init_ui()
-        self.worker = None
-        self.failed_files = []  # 记录清理失败的文件
-
-    def load_config(self):
-        """加载配置设置"""
-        self.config = configparser.ConfigParser()
-        config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.ini")
-        
-        if os.path.exists(config_path):
-            self.config.read(config_path, encoding="utf-8")
-            if 'Settings' in self.config:
-                self.force_mode_activated = self.config.getboolean('Settings', 'ForceMode', fallback=False)
-                self.developer_force_mode = self.config.getboolean('Settings', 'DeveloperMode', fallback=False)
-        else:
-            # 默认配置
-            self.config['Settings'] = {
-                'ForceMode': 'False',
-                'DeveloperMode': 'False'
-            }
-
-    def save_config(self):
-        """保存配置设置"""
-        self.config['Settings'] = {
-            'ForceMode': str(self.force_mode_activated),
-            'DeveloperMode': str(self.developer_force_mode)
-        }
-        
-        config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.ini")
-        with open(config_path, 'w', encoding="utf-8") as configfile:
-            self.config.write(configfile)
 
     def init_ui(self):
         """初始化用户界面"""
@@ -974,16 +947,7 @@ class DiskCleanerApp(QMainWindow):
         # 添加菜单
         self.create_menu()
         
-        # 如果之前激活了强力模式，更新UI
-        if self.force_mode_activated:
-            self.deep_dev_mode_label.setText("强力模式: <span style='color: green; font-weight: bold;'>已激活</span>")
-            self.force_mode_check.setEnabled(True)
-            if self.mode_combo.currentIndex() == 2:  # 深度清理模式
-                self.force_mode_check.setChecked(True)
-        else:
-            # 新增：确保强力模式未激活时，复选框禁用
-            self.force_mode_check.setEnabled(False)
-            self.force_mode_check.setChecked(False)
+        # 强力模式重置，不保存配置
 
     def create_normal_ui(self):
         """创建普通用户界面"""
@@ -1052,10 +1016,9 @@ class DiskCleanerApp(QMainWindow):
         self.path_list = QListWidget()
         self.path_list.setStyleSheet("QListWidget { background-color: #f0f0f0; }")
         
-        # 添加强力模式输入框
+        # 修改输入框提示文字
         self.force_path_edit = QLineEdit()
-        self.force_path_edit.setPlaceholderText("输入路径或特殊代码激活强力模式")
-        self.force_path_edit.textChanged.connect(self.check_force_mode_activation)
+        self.force_path_edit.setPlaceholderText("输入路径")
         self.force_path_edit.setContextMenuPolicy(Qt.NoContextMenu)  # 禁用右键菜单
         
         add_btn = QPushButton("添加路径")
@@ -1063,19 +1026,10 @@ class DiskCleanerApp(QMainWindow):
         remove_btn = QPushButton("移除选中")
         remove_btn.clicked.connect(self.remove_custom_path)
         
-        # 开发者模式提示
-        self.dev_mode_label = QLabel("开发者模式: 未激活")
-        if self.developer_force_mode:
-            self.dev_mode_label.setText("开发者模式: <span style='color: green; font-weight: bold;'>已激活</span>")
-        else:
-            self.dev_mode_label.setText("开发者模式: 未激活")
-        self.dev_mode_label.setStyleSheet("color: gray; font-style: italic;")
-        
         custom_layout.addWidget(QLabel("自定义路径列表:"))
         custom_layout.addWidget(self.path_list)
-        custom_layout.addWidget(QLabel("强力模式激活:"))
+        custom_layout.addWidget(QLabel("输入路径:"))
         custom_layout.addWidget(self.force_path_edit)
-        custom_layout.addWidget(self.dev_mode_label)
         custom_layout.addWidget(add_btn)
         custom_layout.addWidget(remove_btn)
         custom_group.setLayout(custom_layout)
@@ -1109,6 +1063,8 @@ class DiskCleanerApp(QMainWindow):
         grid = QVBoxLayout()
         
         self.deep_clean_checks = [
+            ("自动扫描temp文件夹", False),
+            ("自动扫描cache文件夹", False),
             ("旧的Windows更新文件", False),
             ("系统内存转储文件", False),
             ("预读取文件", False),
@@ -1135,41 +1091,31 @@ class DiskCleanerApp(QMainWindow):
         restore_btn.clicked.connect(self.create_system_restore_point)
         layout.addWidget(restore_btn)
         
-        # 自定义路径输入（用于特殊代码激活）
-        custom_group = QGroupBox("自定义清理路径（输入特殊代码激活强力模式）")
+        # 自定义路径输入
+        custom_group = QGroupBox("自定义清理路径")
         custom_layout = QVBoxLayout()
         
         self.deep_custom_path_edit = QLineEdit()
-        self.deep_custom_path_edit.setPlaceholderText("输入路径或特殊代码激活强力模式")
-        self.deep_custom_path_edit.textChanged.connect(self.check_deep_force_mode_activation)
+        self.deep_custom_path_edit.setPlaceholderText("输入路径")
         self.deep_custom_path_edit.setContextMenuPolicy(Qt.NoContextMenu)  # 禁用右键菜单
         
         add_btn = QPushButton("选择路径")
         add_btn.clicked.connect(self.add_deep_custom_path)
         
-        # 状态标签
-        self.deep_dev_mode_label = QLabel("强力模式: 未激活")
-        if self.force_mode_activated:
-            self.deep_dev_mode_label.setText("强力模式: <span style='color: green; font-weight: bold;'>已激活</span>")
-        else:
-            self.deep_dev_mode_label.setText("强力模式: 未激活")
-        self.deep_dev_mode_label.setStyleSheet("color: gray; font-style: italic;")
-        
-        custom_layout.addWidget(QLabel("输入路径或特殊代码:"))
+        custom_layout.addWidget(QLabel("输入路径:"))
         custom_layout.addWidget(self.deep_custom_path_edit)
         custom_layout.addWidget(add_btn)
-        custom_layout.addWidget(self.deep_dev_mode_label)
         custom_group.setLayout(custom_layout)
         layout.addWidget(custom_group)
         
-        # 添加强力模式选项
-        force_group = QGroupBox("开发者专用强力模式 (实验箱)")
+        # 添加强力模式选项 - 初始隐藏
+        self.force_group = QGroupBox("开发者专用强力模式 (实验箱)")
         force_layout = QVBoxLayout()
         
         self.force_mode_check = QCheckBox("启用IRP强力清除模式 (危险!)")
         self.force_mode_check.setStyleSheet("color: #FF5722; font-weight: bold;")
-        self.force_mode_check.setEnabled(self.force_mode_activated)
-        self.force_mode_check.setChecked(self.force_mode_activated)
+        self.force_mode_check.setEnabled(False)
+        self.force_mode_check.setChecked(False)
         
         force_note = QLabel(
             "此模式使用底层IRP操作强制清除被锁定的文件\n"
@@ -1179,8 +1125,9 @@ class DiskCleanerApp(QMainWindow):
         
         force_layout.addWidget(self.force_mode_check)
         force_layout.addWidget(force_note)
-        force_group.setLayout(force_layout)
-        layout.addWidget(force_group)
+        self.force_group.setLayout(force_layout)
+        self.force_group.setVisible(False)  # 初始隐藏
+        layout.addWidget(self.force_group)
         
         layout.addStretch()
         widget.setLayout(layout)
@@ -1188,22 +1135,16 @@ class DiskCleanerApp(QMainWindow):
 
     def add_deep_custom_path(self):
         """为深度清理模式添加自定义路径"""
+        # 检查是否输入了激活代码
+        text = self.deep_custom_path_edit.text().strip()
+        if text == "&*dyz!!!!dyz*&":
+            self.activate_developer_force_mode()
+            self.deep_custom_path_edit.clear()
+            return
+            
         path = QFileDialog.getExistingDirectory(self, "选择清理目录")
         if path:
             self.deep_custom_path_edit.setText(path)
-
-    def check_deep_force_mode_activation(self):
-        """检查深度清理模式下是否输入了特殊代码"""
-        text = self.deep_custom_path_edit.text().strip()
-        if text == "&*dyz!!!!dyz*&":
-            # 检查是否选择了自定义路径
-            if self.deep_custom_path_edit.text().strip() == "":
-                QMessageBox.warning(self, "激活失败", "请先在自定义路径列表中添加至少一个路径")
-                return
-                
-            # 检查是否只选择了激活代码
-            self.activate_developer_force_mode()
-            self.deep_custom_path_edit.clear()
 
     def create_menu(self):
         """创建菜单栏"""
@@ -1232,38 +1173,33 @@ class DiskCleanerApp(QMainWindow):
         log_action.triggered.connect(self.show_update_log)
         help_menu.addAction(log_action)
 
-    def check_force_mode_activation(self):
-        """检查是否输入了强力模式激活代码"""
+    def add_custom_path(self):
+        """添加自定义清理路径"""
+        # 检查是否输入了激活代码
         text = self.force_path_edit.text().strip()
         if text == "&*dyz!!!!dyz*&":
-            # 检查是否选择了自定义路径
-            if self.path_list.count() == 0:
-                QMessageBox.warning(self, "激活失败", "请先在自定义路径列表中添加至少一个路径")
-                return
-                
-            # 检查是否只选择了激活代码
             self.activate_developer_force_mode()
             self.force_path_edit.clear()
+            return
+            
+        path = QFileDialog.getExistingDirectory(self, "选择清理目录")
+        if path:
+            self.path_list.addItem(path)
 
     def activate_developer_force_mode(self):
         """激活开发者强力模式"""
-        if self.developer_force_mode:
+        if hasattr(self, 'developer_force_mode') and self.developer_force_mode:
             return
             
         dialog = ForceModePasswordDialog(self)
         if dialog.exec_() == QDialog.Accepted:
             self.developer_force_mode = True
             self.force_mode_activated = True
-            self.deep_dev_mode_label.setText("强力模式: <span style='color: green; font-weight: bold;'>已激活</span>")
-            self.dev_mode_label.setText("开发者模式: <span style='color: green; font-weight: bold;'>已激活</span>")
+            
+            # 在深度清理模式显示强力模式选项
+            self.force_group.setVisible(True)
             self.force_mode_check.setEnabled(True)
-            
-            # 在深度清理模式启用强力模式选项
-            if self.mode_combo.currentIndex() == 2:  # 深度清理模式
-                self.force_mode_check.setChecked(True)
-            
-            # 保存配置
-            self.save_config()
+            self.force_mode_check.setChecked(True)
                 
             QMessageBox.information(self, "强力模式激活", 
                 "强力模式已激活！\n\n"
@@ -1295,19 +1231,13 @@ class DiskCleanerApp(QMainWindow):
             if msg_box.clickedButton() == confirm_btn:
                 self.create_system_restore_point()
                 
-            # 如果开发者模式已激活，启用强力模式选项
-            if self.developer_force_mode:
+            # 如果开发者模式已激活，显示强力模式选项
+            if hasattr(self, 'developer_force_mode') and self.developer_force_mode:
+                self.force_group.setVisible(True)
                 self.force_mode_check.setEnabled(True)
             else:
-                # 新增：未激活强力模式时禁用复选框
-                self.force_mode_check.setEnabled(False)
-                self.force_mode_check.setChecked(False)
-
-    def add_custom_path(self):
-        """添加自定义清理路径"""
-        path = QFileDialog.getExistingDirectory(self, "选择清理目录")
-        if path:
-            self.path_list.addItem(path)
+                # 未激活强力模式时隐藏选项组
+                self.force_group.setVisible(False)
 
     def remove_custom_path(self):
         """移除选中的自定义路径"""
@@ -1330,7 +1260,7 @@ class DiskCleanerApp(QMainWindow):
         mode = self.mode_combo.currentIndex()
         
         # 检查是否激活了开发者强力模式
-        force_mode = self.force_mode_activated
+        force_mode = hasattr(self, 'force_mode_activated') and self.force_mode_activated
         
         # 普通模式任务
         if mode == 0:
@@ -1349,7 +1279,7 @@ class DiskCleanerApp(QMainWindow):
         # 高级模式任务
         elif mode == 1:
             # 检查是否只选择了激活代码
-            if self.force_mode_activated and self.path_list.count() == 1:
+            if force_mode and self.path_list.count() == 1:
                 path = self.path_list.item(0).text()
                 # 修复：传递正确的参数
                 tasks.append((self.force_clean_directory, [path]))
@@ -1366,16 +1296,21 @@ class DiskCleanerApp(QMainWindow):
         
         # 深度清理模式任务
         elif mode == 2:
-            force_mode = self.force_mode_check.isChecked()
+            force_mode = hasattr(self, 'force_mode_check') and self.force_mode_check.isChecked()
             for i, (text, _) in enumerate(self.deep_clean_checks):
                 if self.deep_clean_checkboxes[i].isChecked():
-                    path = self.get_deep_clean_path(text)
-                    if path:
-                        # 修复：传递正确的参数
-                        if force_mode:
-                            tasks.append((self.force_clean_directory, [path]))
-                        else:
-                            tasks.append((self.clean_directory, [path, force_mode]))
+                    if text == "自动扫描temp文件夹":
+                        tasks.append((self.clean_temp_folders, [force_mode]))
+                    elif text == "自动扫描cache文件夹":
+                        tasks.append((self.clean_cache_folders, [force_mode]))
+                    else:
+                        path = self.get_deep_clean_path(text)
+                        if path:
+                            # 修复：传递正确的参数
+                            if force_mode:
+                                tasks.append((self.force_clean_directory, [path]))
+                            else:
+                                tasks.append((self.clean_directory, [path, force_mode]))
             
             # 添加自定义路径
             custom_path = self.deep_custom_path_edit.text().strip()
@@ -1546,6 +1481,71 @@ class DiskCleanerApp(QMainWindow):
         }
         return paths.get(option, "")
 
+    def clean_temp_folders(self, force_mode=False):
+        """自动扫描并清理包含'temp'的文件夹"""
+        self.scan_and_clean_pattern('temp', force_mode)
+
+    def clean_cache_folders(self, force_mode=False):
+        """自动扫描并清理包含'cache'的文件夹"""
+        self.scan_and_clean_pattern('cache', force_mode)
+
+    def scan_and_clean_pattern(self, pattern, force_mode=False):
+        """扫描C盘并清理包含指定模式的文件夹"""
+        if self.worker:
+            self.worker.log(f"开始扫描包含'{pattern}'的文件夹...")
+        
+        try:
+            # 扫描C盘根目录和主要目录
+            scan_paths = [
+                'C:\\',
+                'C:\\Users',
+                'C:\\Program Files',
+                'C:\\Program Files (x86)',
+                'C:\\Windows',
+                os.path.join(os.environ.get('LOCALAPPDATA', 'C:\\Users\\Default\\AppData\\Local')),
+                os.path.join(os.environ.get('APPDATA', 'C:\\Users\\Default\\AppData\\Roaming'))
+            ]
+            
+            found_count = 0
+            cleaned_count = 0
+            
+            for base_path in scan_paths:
+                if not os.path.exists(base_path):
+                    continue
+                    
+                for root, dirs, files in os.walk(base_path):
+                    # 检查是否被取消
+                    if self.worker and self.worker.is_canceled:
+                        return
+                    
+                    # 检查目录名是否包含目标模式（不区分大小写）
+                    for dir_name in dirs:
+                        if pattern.lower() in dir_name.lower():
+                            dir_path = os.path.join(root, dir_name)
+                            try:
+                                if self.worker:
+                                    self.worker.log(f"找到{pattern}文件夹: {dir_path}")
+                                found_count += 1
+                                
+                                # 清理文件夹内容
+                                self.clean_directory(dir_path, force_mode)
+                                cleaned_count += 1
+                                
+                            except Exception as e:
+                                if self.worker:
+                                    self.worker.log(f"清理{pattern}文件夹失败 {dir_path}: {e}")
+                    
+                    # 发送心跳信号，防止假死
+                    if self.worker:
+                        self.worker.heartbeat.emit()
+            
+            if self.worker:
+                self.worker.log(f"扫描完成: 找到 {found_count} 个{pattern}文件夹，成功清理 {cleaned_count} 个")
+                
+        except Exception as e:
+            if self.worker:
+                self.worker.log(f"扫描{pattern}文件夹时出错: {e}")
+
     def clean_directory(self, path, force_mode=False):
         """清理指定目录"""
         if isinstance(path, list):
@@ -1580,7 +1580,7 @@ class DiskCleanerApp(QMainWindow):
                     item_path = os.path.join(path, item)
                     
                     # 跳过系统关键文件（仅在非实验箱模式下）
-                    if not self.force_mode_activated:
+                    if not hasattr(self, 'force_mode_activated') or not self.force_mode_activated:
                         system_files = [
                             "ntoskrnl.exe", "hal.dll", "winload.exe", "winresume.exe",
                             "bootmgr", "pagefile.sys", "hiberfil.sys", "swapfile.sys"
@@ -1732,6 +1732,34 @@ class DiskCleanerApp(QMainWindow):
                 self.worker.log(error_msg)
                 self.worker.warning.emit(error_msg)
 
+    def take_ownership(self, file_path):
+        """获取文件所有权并设置完全控制权限"""
+        try:
+            # 获取文件安全描述符
+            sd = win32security.GetFileSecurity(file_path, win32security.OWNER_SECURITY_INFORMATION)
+            user, domain, _ = win32security.LookupAccountName("", os.getenv("USERNAME"))
+            
+            # 设置新的所有者
+            sd.SetSecurityDescriptorOwner(user, False)
+            
+            # 设置新的DACL - 修复：使用正确的权限常量
+            dacl = win32security.ACL()
+            
+            # 使用 GENERIC_ALL 而不是 FILE_ALL_ACCESS
+            # GENERIC_ALL 包括所有标准权限
+            dacl.AddAccessAllowedAce(win32security.ACL_REVISION, win32con.GENERIC_ALL, user)
+            
+            sd.SetSecurityDescriptorDacl(1, dacl, 0)
+            
+            # 应用新的安全描述符
+            win32security.SetFileSecurity(file_path, win32security.DACL_SECURITY_INFORMATION | win32security.OWNER_SECURITY_INFORMATION, sd)
+            
+            return True
+        except Exception as e:
+            if self.worker:
+                self.worker.log(f"获取文件所有权失败: {file_path} - {e}")
+            return False
+
     def force_delete_file(self, file_path):
         """强制删除文件 - 使用IRP操作，确保实际删除"""
         if self.worker and self.worker.is_canceled:
@@ -1801,7 +1829,8 @@ class DiskCleanerApp(QMainWindow):
             
             # 方法2: 使用FILE_FLAG_DELETE_ON_CLOSE
             try:
-                # 获取文件句柄，并设置删除标志
+                # 获取文件句柄，并设置删除标志 - 修复权限问题
+                # 使用 GENERIC_READ | GENERIC_WRITE 而不是 FILE_ALL_ACCESS
                 handle = win32file.CreateFile(
                     file_path,
                     win32file.GENERIC_READ | win32file.GENERIC_WRITE,
@@ -1828,7 +1857,8 @@ class DiskCleanerApp(QMainWindow):
             
             # 方法3: 使用SetFileInformationByHandle设置删除标志
             try:
-                # 获取文件句柄
+                # 获取文件句柄 - 修复权限问题
+                # 使用 GENERIC_WRITE 而不是 GENERIC_ALL
                 handle = win32file.CreateFile(
                     file_path,
                     win32file.GENERIC_WRITE,
@@ -1929,30 +1959,6 @@ class DiskCleanerApp(QMainWindow):
             if self.worker:
                 self.worker.heartbeat.emit()
             
-    def take_ownership(self, file_path):
-        """获取文件所有权并设置完全控制权限"""
-        try:
-            # 获取文件安全描述符
-            sd = win32security.GetFileSecurity(file_path, win32security.OWNER_SECURITY_INFORMATION)
-            user, domain, _ = win32security.LookupAccountName("", os.getenv("USERNAME"))
-            
-            # 设置新的所有者
-            sd.SetSecurityDescriptorOwner(user, False)
-            
-            # 设置新的DACL
-            dacl = win32security.ACL()
-            dacl.AddAccessAllowedAce(win32security.ACL_REVISION, win32con.FILE_ALL_ACCESS, user)
-            sd.SetSecurityDescriptorDacl(1, dacl, 0)
-            
-            # 应用新的安全描述符
-            win32security.SetFileSecurity(file_path, win32security.DACL_SECURITY_INFORMATION | win32security.OWNER_SECURITY_INFORMATION, sd)
-            
-            return True
-        except Exception as e:
-            if self.worker:
-                self.worker.log(f"获取文件所有权失败: {file_path} - {e}")
-            return False
-
     def is_file_running(self, file_path):
         """检查文件是否被进程使用"""
         try:
@@ -2023,54 +2029,6 @@ class DiskCleanerApp(QMainWindow):
                 self.worker.log(f"结束进程时出错: {e}")
             return False
 
-    def terminate_processes_aggressively(self, file_path):
-        """更强大的进程终止方式"""
-        try:
-            file_path = os.path.abspath(file_path).lower()
-            
-            # 方法1：使用taskkill强制终止
-            try:
-                subprocess.run(f'taskkill /f /im "{os.path.basename(file_path)}"', 
-                              shell=True, check=True, timeout=10)
-                self.worker.log(f"使用taskkill强制终止进程: {file_path}")
-                return True
-            except:
-                pass
-            
-            # 方法2：使用WMIC终止进程
-            try:
-                process_name = os.path.basename(file_path)
-                subprocess.run(f'wmic process where "name=\'{process_name}\'" delete', 
-                              shell=True, check=True, timeout=10)
-                self.worker.log(f"使用WMIC强制终止进程: {file_path}")
-                return True
-            except:
-                pass
-            
-            # 方法3：使用psexec以SYSTEM权限终止
-            try:
-                base_dir = os.path.dirname(os.path.abspath(__file__))
-                tools_dir = os.path.join(base_dir, "tools")
-                if not os.path.exists(tools_dir):
-                    tools_dir = os.path.join(os.environ['TEMP'], "adsCleanerTools")
-                
-                psexec_path = os.path.join(tools_dir, "PsExec64.exe" if sys.maxsize > 2**32 else "PsExec.exe")
-                
-                if os.path.exists(psexec_path):
-                    subprocess.run(
-                        f'"{psexec_path}" -accepteula -s taskkill /f /im "{os.path.basename(file_path)}"',
-                        shell=True, check=True, timeout=15
-                    )
-                    self.worker.log(f"使用psexec以SYSTEM权限终止进程: {file_path}")
-                    return True
-            except Exception as e:
-                self.worker.log(f"使用psexec终止进程失败: {e}")
-            
-            return False
-        except Exception as e:
-            self.worker.log(f"强力终止进程时出错: {e}")
-            return False
-
     def unlock_file(self, file_path):
         """使用特殊技术解除文件锁定"""
         try:
@@ -2139,62 +2097,6 @@ class DiskCleanerApp(QMainWindow):
             return True
         except Exception as e:
             self.worker.log(f"使用handle.exe解锁失败: {e}")
-            return False
-
-    def try_unlock_with_api(self, file_path):
-        """使用Windows API解除文件锁定"""
-        try:
-            self.worker.log(f"尝试使用Windows API解除文件锁定: {file_path}")
-            
-            # 定义必要的Windows API
-            kernel32 = ctypes.Windll('kernel32', use_last_error=True)
-            
-            # 定义结构体和常量
-            FILE_SHARE_READ = 1
-            FILE_SHARE_WRITE = 2
-            FILE_SHARE_DELETE = 4
-            OPEN_EXISTING = 3
-            
-            # 使用正确的属性名：win32file.FILE_FLAG_BACKUP_SEMANTICS
-            FILE_FLAG_BACKUP_SEMANTICS = win32file.FILE_FLAG_BACKUP_SEMANTICS
-            
-            # 尝试打开文件
-            handle = kernel32.CreateFileW(
-                file_path,
-                0,  # 无访问权限
-                FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-                None,
-                OPEN_EXISTING,
-                FILE_FLAG_BACKUP_SEMANTICS,
-                None
-            )
-            
-            if handle == -1:  # INVALID_HANDLE_VALUE
-                error = ctypes.get_last_error()
-                self.worker.log(f"无法打开文件句柄 (错误代码: {error})")
-                return False
-            
-            # 尝试设置文件删除标志
-            FILE_DISPOSITION_INFO = 4
-            disposition_info = ctypes.c_byte(1)  # 设置为True表示删除
-            
-            result = SetFileInformationByHandle(
-                handle,
-                FILE_DISPOSITION_INFO,
-                ctypes.byref(disposition_info),
-                ctypes.sizeof(disposition_info)
-            )
-            
-            if not result:
-                error_code = ctypes.windll.kernel32.GetLastError()
-                self.worker.log(f"SetFileInformationByHandle失败 (错误代码: {error_code})")
-            
-            # 关闭句柄
-            kernel32.CloseHandle(handle)
-            
-            return bool(result)
-        except Exception as e:
-            self.worker.log(f"使用Windows API解锁失败: {e}")
             return False
 
     def force_delete_directory(self, dir_path):
@@ -2561,7 +2463,13 @@ class DiskCleanerApp(QMainWindow):
         if self.log_dialog:
             self.log_dialog.text_edit.append("\n\n" + "="*50 + "\n清理完成!\n" + "="*50)
         
-        # 不再重置强力模式状态 - 移除相关代码
+        # 重置强力模式状态
+        self.force_mode_activated = False
+        self.developer_force_mode = False
+        self.force_group.setVisible(False)
+        self.force_mode_check.setEnabled(False)
+        self.force_mode_check.setChecked(False)
+            
         QMessageBox.information(self, "完成", "清理操作已完成!")
             
         self.progress_bar.setValue(0)
@@ -2580,24 +2488,16 @@ class DiskCleanerApp(QMainWindow):
     def show_about(self):
         """显示关于对话框"""
         QMessageBox.about(self, "关于 adsC盘清理大师", 
-                         "版本: 1.3\n\n"
+                         "版本: 1.4\n\n"
                          "一款深度清理C盘的专业工具\n"
-                         "支持三种清理模式:\n"
-                         "  - 普通用户模式\n"
-                         "  - 技术人员模式\n"
-                         "  - 深度清理模式\n\n"
-                         "新增磁盘空间统计功能\n"
-                         "修复回收站清理问题\n"
-                         "许可证: MIT\n"
-                         "开发者：dyz131005\n"
-                         "邮箱: 3069278895@qq.com")
+                         "开发者：dyz131005")
 
     def close_app(self):
         """关闭应用"""
         if self.worker and self.worker.isRunning():
             self.worker.cancel()
             self.worker.wait(2000)
-        self.save_config()  # 保存配置
+        # 不保存配置
         QApplication.quit()
 
     def closeEvent(self, event):
@@ -2605,7 +2505,7 @@ class DiskCleanerApp(QMainWindow):
         if self.worker and self.worker.isRunning():
             self.worker.cancel()
             self.worker.wait(2000)
-        self.save_config()  # 保存配置
+        # 不保存配置
         event.accept()
 
     def update_disk_usage(self):
